@@ -19,11 +19,11 @@
 using namespace cv;
 using namespace std;
 
-Mat compareImage, src, dst,temp;
+Mat compareImage, src, dst,temp, grad_xr, grad_yu, angles, magnit, angles2, magnit2;
 
 int *hist;
 
-/*
+
 void hog(Mat source)
 {
 	int nwin_x = 3, nwin_y = 3, cont = 0;
@@ -42,23 +42,23 @@ void hog(Mat source)
 	float norm_ = 0;
 	float H2[9] {0, };
 	float ang_lim = 0;
-	Mat grad_xr(col, row, CV_8UC3);	Mat grad_yu(col, row, CV_8UC3);
-	Mat angles(col, row, CV_8UC3);	Mat magnit(col, row, CV_8UC3);
+	grad_xr = Mat(row, col, CV_8UC3);	grad_yu = Mat(row, col, CV_8UC3);
+	angles = Mat(row, col, CV_8UC3);	magnit = Mat(row, col, CV_8UC3);
 	//
 	for (int y = 0; y < col; y++){
 		for (int x = 0; x < row; x++){
 			for (int z = 0; z < 3; z++){
 				if (x == 0){
-					grad_xr.data[y*source.rows*ch + x*ch + z] = (int)source.data[y*source.rows*ch + (x + 1)*ch + z];
-					grad_yu.data[y*source.rows*ch + x*ch + z] = -(int)source.data[y*source.rows*ch + (x + 1)*ch + z];
+					grad_xr.data[y*source.cols*ch + x*ch + z] = (int)source.data[y*source.cols*ch + (x + 1)*ch + z];
+					grad_yu.data[y*source.cols*ch + x*ch + z] = -(int)source.data[y*source.cols*ch + (x + 1)*ch + z];
 				}
 				else if (x == row - 1){
-					grad_xr.data[y*source.rows*ch + x*ch + z] = -(int)source.data[y*source.rows*ch + (x - 1)*ch + z];
-					grad_yu.data[y*source.rows*ch + x*ch + z] = (int)source.data[y*source.rows*ch + (x - 1)*ch + z];
+					grad_xr.data[y*source.cols*ch + x*ch + z] = -(int)source.data[y*source.cols*ch + (x - 1)*ch + z];
+					grad_yu.data[y*source.cols*ch + x*ch + z] = (int)source.data[y*source.cols*ch + (x - 1)*ch + z];
 				}
 				else{
-					grad_xr.data[y*source.rows*ch + x*ch + z] = (int)source.data[y*source.rows*ch + (x + 1)*ch + z] - (int)source.data[y*source.rows*ch + (x - 1)*ch + z];
-					grad_yu.data[y*source.rows*ch + x*ch + z] = -(int)source.data[y*source.rows*ch + (x + 1)*ch + z] + (int)source.data[y*source.rows*ch + (x - 1)*ch + z];
+					grad_xr.data[y*source.cols*ch + x*ch + z] = (int)source.data[y*source.cols*ch + (x + 1)*ch + z] - (int)source.data[y*source.cols*ch + (x - 1)*ch + z];
+					grad_yu.data[y*source.cols*ch + x*ch + z] = -(int)source.data[y*source.cols*ch + (x + 1)*ch + z] + (int)source.data[y*source.cols*ch + (x - 1)*ch + z];
 				}
 			}
 		}
@@ -67,17 +67,30 @@ void hog(Mat source)
 	for (int y = 0; y < col; y++){
 		for (int x = 0; x < row; x++){
 			for (int z = 0; z < ch; z++){
-				angles.data[y*source.rows*ch + x*ch + z] = atan2(grad_xr.data[y*source.rows*ch + x*ch + z], grad_yu.data[y*source.rows*ch + x*ch + z]);
-				magnit.data[y*source.rows*ch + x*ch + z] = grad_xr.data[y*source.rows*ch + x*ch + z] * grad_xr.data[y*source.rows*ch + x*ch + z] +
-					grad_yu.data[y*source.rows*ch + x*ch + z] * grad_yu.data[y*source.rows*ch + x*ch + z];
-				magnit.data[y*source.rows*ch + x*ch + z] = pow(magnit.data[y*source.rows*ch + x*ch + z], 5);
+				angles.data[y*source.cols*ch + x*ch + z] = atan2(grad_xr.data[y*source.cols*ch + x*ch + z], grad_yu.data[y*source.cols*ch + x*ch + z]);
+				magnit.data[y*source.cols*ch + x*ch + z] = grad_xr.data[y*source.cols*ch + x*ch + z] * grad_xr.data[y*source.cols*ch + x*ch + z] +
+				grad_yu.data[y*source.cols*ch + x*ch + z] * grad_yu.data[y*source.cols*ch + x*ch + z];
+				magnit.data[y*source.cols*ch + x*ch + z] = pow(magnit.data[y*source.cols*ch + x*ch + z], 5);
 			}
 		}
 	}
-
-	for (int y = 0; y < nwin_y - 1; y++){
-		for (int x = 0; x < nwin_x - 1; x++){
+	
+	angles2 = Mat(step_y * 2, step_x * 2, CV_8UC3);
+	magnit2 = Mat(step_y * 2, step_x * 2, CV_8UC3);
+	int K = 0;
+	for (int y = 0; y < nwin_y; y++){
+		for (int x = 0; x < nwin_x; x++){
 			cont++;
+
+			for (int i = y*step_y; i < (y + 2)*step_y; i++) {
+				for (int j = x*step_x; j < (x + 2)*step_x; j++) {
+					for (int c = 0; c < 3; c++) {
+						angles2.data[(i - (y * step_y)) * 2 * step_x * 3 + (j - (x * step_x)) * 3 + c] = angles.data[i * angles.cols * 3 + j * 3 + c];
+						magnit2.data[(i - (y * step_y)) * 2 * step_x * 3 + (j - (x * step_x)) * 3 + c] = magnit.data[i * angles.cols * 3 + j * 3 + c];
+					}
+				}
+			}
+			K = angles2.rows * angles.cols * ch;
 
 
 			bin = 0;
@@ -85,14 +98,14 @@ void hog(Mat source)
 			for (int x = 0; x < 9; x++)
 				H2[x] = 0;
 			// 2 for loop
-			for (ang_lim = PI + 2 * PI / B; ang_lim < 2; ang_lim += PI) {
+			for (ang_lim = -PI + 2 * PI / B; ang_lim < PI; ang_lim += 2 * PI / B) {
 				bin++;
-			//	for (int x = 0; x < K; x++){
-					//if (v_angle[x] < ang_lim){
-					//	v_angle[x] = 100;
-					//	H2[bin] += v_magnit[x];
-					//}
-				//}
+				for (int x = 0; x < K; x++){
+					if (angles2.data[x] < ang_lim){
+						angles2.data[x] = 100;
+						H2[bin] += magnit2.data[x];
+					}
+				}
 			}
 			// H2 = H2/(norm(H2) +0.01);
 			for (int x = 0; x < 9; x++)
@@ -102,14 +115,11 @@ void hog(Mat source)
 			for (int x = 0; x < 9; x++){
 				H2[x] /= (norm_ + 0.01);
 			} norm_ = 0;
-
-
 		}
 	}
 
 }
 
-*/
 
 Mat GrayScale(Mat source){		//흑백이미지로 만듬. 채널도 1로 바뀜.
 	int ch = source.channels();
@@ -427,9 +437,20 @@ int main() {
 
 	cout << "학습 데이터 구축" << endl;
 
+	//compareImage = GrayScale(imread("..\\samples\\Car\\10.jpg", CV_LOAD_IMAGE_COLOR));
+	compareImage = Resizing(GrayScale(imread("..\\database\\carData\\uzLeft\\uzLeft01.jpg")), MATCH_SIZE_X, MATCH_SIZE_Y);
+	hog(compareImage);
+	
+	cvNamedWindow("xr", CV_WINDOW_AUTOSIZE);
+	imshow("xr", grad_xr);
+	cvNamedWindow("yu", CV_WINDOW_AUTOSIZE);
+	imshow("yu", grad_yu);
+	cvNamedWindow("angles", CV_WINDOW_AUTOSIZE);
+	imshow("angles", angles);
+	cvNamedWindow("magnit", CV_WINDOW_AUTOSIZE);
+	imshow("magnit", magnit);
 
-	compareImage = GrayScale(imread("..\\samples\\Car\\10.jpg", CV_LOAD_IMAGE_COLOR));
-
+	/*
 	int matchCount = 0;
 	int clipX = MATCH_SIZE_X;
 	int clipY = MATCH_SIZE_Y;
@@ -471,7 +492,7 @@ int main() {
 	imshow("feature", intFeatureOfCar);
 	imshow("compare", compareImage);
 	imshow("edge", edgeFeatureOfCar);
-
+	*/
 	char ch = waitKey();	// 무한 대기
 
 
