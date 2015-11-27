@@ -45,14 +45,14 @@ void hog(Mat source)
 	grad_xr = Mat(row, col, CV_8UC3);	grad_yu = Mat(row, col, CV_8UC3);
 	angles = Mat(row, col, CV_8UC3);	magnit = Mat(row, col, CV_8UC3);
 	//
-	for (int y = 0; y < col; y++){
-		for (int x = 0; x < row; x++){
+	for (int y = 0; y < row; y++){
+		for (int x = 0; x < col; x++){
 			for (int z = 0; z < 3; z++){
 				if (x == 0){
 					grad_xr.data[y*source.cols*ch + x*ch + z] = (int)source.data[y*source.cols*ch + (x + 1)*ch + z];
 					grad_yu.data[y*source.cols*ch + x*ch + z] = -(int)source.data[y*source.cols*ch + (x + 1)*ch + z];
 				}
-				else if (x == row - 1){
+				else if (x == col - 1){
 					grad_xr.data[y*source.cols*ch + x*ch + z] = -(int)source.data[y*source.cols*ch + (x - 1)*ch + z];
 					grad_yu.data[y*source.cols*ch + x*ch + z] = (int)source.data[y*source.cols*ch + (x - 1)*ch + z];
 				}
@@ -64,8 +64,8 @@ void hog(Mat source)
 		}
 	}
 
-	for (int y = 0; y < col; y++){
-		for (int x = 0; x < row; x++){
+	for (int y = 0; y < row; y++){
+		for (int x = 0; x < col; x++){
 			for (int z = 0; z < ch; z++){
 				angles.data[y*source.cols*ch + x*ch + z] = atan2(grad_xr.data[y*source.cols*ch + x*ch + z], grad_yu.data[y*source.cols*ch + x*ch + z]);
 				magnit.data[y*source.cols*ch + x*ch + z] = grad_xr.data[y*source.cols*ch + x*ch + z] * grad_xr.data[y*source.cols*ch + x*ch + z] +
@@ -84,13 +84,13 @@ void hog(Mat source)
 
 			for (int i = y*step_y; i < (y + 2)*step_y; i++) {
 				for (int j = x*step_x; j < (x + 2)*step_x; j++) {
-					for (int c = 0; c < 3; c++) {
-						angles2.data[(i - (y * step_y)) * 2 * step_x * 3 + (j - (x * step_x)) * 3 + c] = angles.data[i * angles.cols * 3 + j * 3 + c];
-						magnit2.data[(i - (y * step_y)) * 2 * step_x * 3 + (j - (x * step_x)) * 3 + c] = magnit.data[i * angles.cols * 3 + j * 3 + c];
+					for (int c = 0; c < ch; c++) {
+						angles2.data[(i - (y * step_y)) * 2 * step_x * ch + (j - (x * step_x)) * ch + c] = angles.data[i * angles.cols * ch + j * ch + c];
+						magnit2.data[(i - (y * step_y)) * 2 * step_x * ch + (j - (x * step_x)) * ch + c] = magnit.data[i * angles.cols * ch + j * ch + c];
 					}
 				}
 			}
-			K = angles2.rows * angles.cols * ch;
+			K = angles2.rows * angles2.cols * ch;
 
 
 			bin = 0;
@@ -438,7 +438,7 @@ int main() {
 	cout << "학습 데이터 구축" << endl;
 
 	//compareImage = GrayScale(imread("..\\samples\\Car\\10.jpg", CV_LOAD_IMAGE_COLOR));
-	compareImage = Resizing(GrayScale(imread("..\\database\\carData\\uzLeft\\uzLeft01.jpg")), MATCH_SIZE_X, MATCH_SIZE_Y);
+	compareImage = imread("..\\database\\carData\\uzLeft\\uzLeft01.jpg");
 	hog(compareImage);
 	
 	cvNamedWindow("xr", CV_WINDOW_AUTOSIZE);
