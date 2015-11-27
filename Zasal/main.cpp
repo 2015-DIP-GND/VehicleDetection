@@ -12,6 +12,93 @@ Mat src,
 dst,
 temp;
 
+int *hist;
+
+void hog(Mat source)
+{
+	int nwin_x = 3, nwin_y = 3, cont = 0;
+	int B = 9, ch = source.channels();
+	int row = source.rows;
+	int col = source.cols;
+	hist = (int*)calloc(nwin_x * nwin_y * B, sizeof(int));
+	int m = sqrt(row / 2), bin = 0;
+	if (col == 1){
+		// error control
+	}
+	int step_x = floor(col / (nwin_x + 1));
+	int step_y = floor(row / (nwin_y + 1));
+	int hx[] = { -1, 0, 1 };
+	int hy[] = { 1, 0, -1 };
+	float norm_ = 0;
+	float H2[9] {0, };
+	float ang_lim = 0;
+	Mat grad_xr(col, row, CV_8UC3);	Mat grad_yu(col, row, CV_8UC3);
+	Mat angles(col, row, CV_8UC3);	Mat magnit(col, row, CV_8UC3);
+	//
+	for (int y = 0; y < col; y++){
+		for (int x = 0; x < row; x++){
+			for (int z = 0; z < 3; z++){
+				if (x == 0){
+					grad_xr.data[y*source.rows*ch + x*ch + z] = (int)source.data[y*source.rows*ch + (x + 1)*ch + z];
+					grad_yu.data[y*source.rows*ch + x*ch + z] = -(int)source.data[y*source.rows*ch + (x + 1)*ch + z];
+				}
+				else if (x == row - 1){
+					grad_xr.data[y*source.rows*ch + x*ch + z] = -(int)source.data[y*source.rows*ch + (x - 1)*ch + z];
+					grad_yu.data[y*source.rows*ch + x*ch + z] = (int)source.data[y*source.rows*ch + (x - 1)*ch + z];
+				}
+				else{
+					grad_xr.data[y*source.rows*ch + x*ch + z] = (int)source.data[y*source.rows*ch + (x + 1)*ch + z] - (int)source.data[y*source.rows*ch + (x - 1)*ch + z];
+					grad_yu.data[y*source.rows*ch + x*ch + z] = -(int)source.data[y*source.rows*ch + (x + 1)*ch + z] + (int)source.data[y*source.rows*ch + (x - 1)*ch + z];
+				}
+			}
+		}
+	}
+
+	for (int y = 0; y < col; y++){
+		for (int x = 0; x < row; x++){
+			for (int z = 0; z < ch; z++){
+				angles.data[y*source.rows*ch + x*ch + z] = atan2(grad_xr.data[y*source.rows*ch + x*ch + z], grad_yu.data[y*source.rows*ch + x*ch + z]);
+				magnit.data[y*source.rows*ch + x*ch + z] = grad_xr.data[y*source.rows*ch + x*ch + z] * grad_xr.data[y*source.rows*ch + x*ch + z] +
+					grad_yu.data[y*source.rows*ch + x*ch + z] * grad_yu.data[y*source.rows*ch + x*ch + z];
+				magnit.data[y*source.rows*ch + x*ch + z] = pow(magnit.data[y*source.rows*ch + x*ch + z], 5);
+			}
+		}
+	}
+
+	for (int y = 0; y < nwin_y - 1; y++){
+		for (int x = 0; x < nwin_x - 1; x++){
+			cont++;
+
+
+			bin = 0;
+			// H2 = zeros(b,1);
+			for (int x = 0; x < 9; x++)
+				H2[x] = 0;
+			// 2 for loop
+			for (ang_lim = PI + 2 * PI / B; ang_lim < 2; ang_lim += PI) {
+				bin++;
+				for (int x = 0; x < K; x++){
+					if (v_angle[x] < ang_lim){
+						v_angle[x] = 100;
+						H2[bin] += v_magnit[x];
+					}
+				}
+			}
+			// H2 = H2/(norm(H2) +0.01);
+			for (int x = 0; x < 9; x++)
+				norm_ += H2[x];
+			norm_ /= 9;
+			// H((cont-1)*B*1 : cont*B,1) = H2;
+			for (int x = 0; x < 9; x++){
+				H2[x] /= (norm_ + 0.01);
+			} norm_ = 0;
+
+
+		}
+	}
+
+}
+
 void GrayScale(Mat source){	//흑백이미지로 만들어 드립니다! 근데 채널수는 그대로입니다.
 
 	int ch = source.channels();
