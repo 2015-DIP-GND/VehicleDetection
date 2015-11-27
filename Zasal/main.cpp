@@ -1,4 +1,5 @@
 #include <iostream>
+#include <string>
 #include <Windows.h>
 #include <opencv2\imgproc.hpp>
 #include <opencv2\highgui\highgui.hpp>
@@ -412,19 +413,22 @@ int main() {
 	int sampleCount = 0;
 	int* scPtr = &sampleCount;
 	//featureOfCar = Resizing(GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car.jpg", CV_LOAD_IMAGE_COLOR)),MATCH_SIZE);
-	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("..\\database\\car01.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
-	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("..\\database\\car02.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
-	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("..\\database\\car03.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
-	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("..\\database\\car04.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
-	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("..\\database\\car05.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
-	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("..\\database\\car06.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
-	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("..\\database\\car07.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
-	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("..\\database\\car08.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
+
+	string filePath = "..\\database\\carData\\uzLeft\\";
+	string fileName = "uzLeft01.jpg";
+	for (int i = 0; i < 19; i++) {
+		AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread(filePath + fileName, CV_LOAD_IMAGE_COLOR), scPtr);
+		fileName[7]++;
+		if (fileName[7] > '9') {
+			fileName[7] -= 10;
+			fileName[6] ++;
+		}
+	}
 
 	cout << "학습 데이터 구축" << endl;
 
 
-	compareImage = GrayScale(imread("..\\samples\\Car\\02.jpg", CV_LOAD_IMAGE_COLOR));
+	compareImage = GrayScale(imread("..\\samples\\Car\\10.jpg", CV_LOAD_IMAGE_COLOR));
 
 	int matchCount = 0;
 	int clipX = MATCH_SIZE_X;
@@ -442,7 +446,7 @@ int main() {
 			similarity += GetSimilarity4(compareClip, edgeFeatureOfCar);
 			similarity /= (MATCH_SIZE_X * MATCH_SIZE_Y);
 			cout << x << "," << y << " 유사도 : " << similarity << endl;
-			if (similarity > 100){
+			if (similarity > 150){
 				cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
 				imshow(x + "a" + y, compareClip);
 				cout << "자동차 입니다!" << endl;
