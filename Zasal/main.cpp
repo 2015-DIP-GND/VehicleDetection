@@ -10,14 +10,15 @@
 #define COLOR_WHITE 0
 #define COLOR_RED 1
 
-#define MATCH_SIZE 80
+#define MATCH_SIZE_X 80
+#define MATCH_SIZE_Y 60
 
 using namespace cv;
 using namespace std;
 
-Mat src, compareImage;
+Mat compareImage;
 
-Mat GrayScale(Mat source){	//흑백이미지로 만들어 드립니다! 근데 채널수도 1로 바뀝니다.
+Mat GrayScale(Mat source){		//흑백이미지로 만듬. 채널도 1로 바뀜.
 	int ch = source.channels();
 	int sum = 0;
 	for (int y = 0; y < source.cols; y++){
@@ -41,8 +42,21 @@ Mat GrayScale(Mat source){	//흑백이미지로 만들어 드립니다! 근데 채널수도 1로 바�
 	return result;
 }
 
-void Binarization(Mat source){
-	int threshold = 128;
+Mat Clipping(Mat source, int sizeX, int sizeY, int x, int y){
+	if (source.channels() != 1){
+		cout << "Clipping Error - channel must be 1" << endl;
+	}
+	int width = source.cols;
+	Mat result(sizeY, sizeX, CV_8UC1);
+	for (int i = y; i < y + sizeY; i++){
+		for (int j = x; j < x + sizeX; j++){
+			result.data[(i - y)*sizeX + (j - x)] = source.data[i*width + j];
+		}
+	}
+	return result;
+}
+
+void Binarization(Mat source, int threshold){	//채널 1개의 이미지에 대해서 이진화(0 또는 255)
 	if (source.channels() != 1){
 		cout << "binarization - this it not a grayscale image" << endl;
 		return;
@@ -61,7 +75,7 @@ void Binarization(Mat source){
 	}
 }
 
-void EdgeDetection(Mat source, int threshold_, int colorType){	//채널수에 상관없이 엣지 디텍션을 해드립니다!
+void EdgeDetection(Mat source, int threshold_, int colorType){	//채널수에 상관없이 엣지를 디텍션함. 엣지를 colorType 색으로 표시함
 	//colorType : 0-흰색 1-빨강
 	Mat buffer;
 	int mask[4][3][3]{
@@ -106,16 +120,21 @@ void EdgeDetection(Mat source, int threshold_, int colorType){	//채널수에 상관없
 						break;
 					}
 				}
+				else{
+					for (int c = 0; c < channel; c++){
+						source.data[y*width*channel + x*channel + c] = 0;
+					}
+				}
 			}
 		}
 	}
 }
 
-Mat Resizing(Mat source, int size){
+Mat Resizing(Mat source, int sizeX , int sizeY){
 	int width = source.cols;
 	int height = source.rows;
-	int blockSizeX = source.cols / (size - 1);		//블럭의 사이즈
-	int blockSizeY = source.rows / (size - 1);		//블럭의 사이즈
+	float blockSizeX = source.cols / (float)sizeX;		//블럭의 사이즈
+	float blockSizeY = source.rows / (float)sizeY;		//블럭의 사이즈
 	int channel = source.channels();
 	if (source.channels() != 1){
 		cout << "Fail to Resizing - channel must be 1" << endl;
@@ -126,145 +145,94 @@ Mat Resizing(Mat source, int size){
 	int colSum = 0;
 	int rowCount = 0;
 	int colCount = 0;
+	int limitX = 0;
+	int limitY = 0;
+	int cumulateX = 0;
+	int cumulateY = 0;
 
-	Mat result(size, size, CV_8UC1);
+	Mat result(sizeY, sizeX, CV_8UC1);
 
-	for (int y = 0; y < size; y++){
-		for (int x = 0; x < size; x++){
+	for (int y = 0; y < sizeY; y++){
+		limitY = (blockSizeY * (y + 1));
+		for (int x = 0; x < sizeX; x++){
+			limitX = (blockSizeX * (x + 1));
 			colSum = 0;
 			colCount = 0;
-			for (int blockY = 0; blockY < blockSizeY && y*blockSizeY + blockY < height; blockY++){
+			for (cumulateY = (int)(blockSizeY * y); cumulateY < limitY ; cumulateY++){
 				rowSum = 0;
 				rowCount = 0;
-				for (int blockX = 0; blockX < blockSizeX && x*blockSizeX + blockX < width; blockX++){
-					rowSum += source.data[((y*blockSizeY) + blockY)*width + ((x*blockSizeX) + blockX)];
+				for (cumulateX = (int)(blockSizeX * x); cumulateX < limitX; cumulateX++){
+					rowSum += source.data[cumulateY * width + cumulateX];
 					rowCount++;
 				}
 				colSum += rowSum / rowCount;
 				colCount++;
 			}
-			result.data[y*size + x] = colSum / colCount;	
+			result.data[y*sizeX + x] = colSum / colCount;
 		}
 	}
 	return result;
-}
-
-Mat Simplification(Mat source, int size, int colorType){		//Edge Detection 되었거나 GrayScale된 이미지를 단순화시킴
-	int width = source.cols;
-	int height = source.rows;
-	int blockSizeX = source.cols / size;		//블럭의 사이즈
-	int blockSizeY = source.rows / size;		//블럭의 사이즈
-	if (blockSizeX == 0 || blockSizeY == 0){
-		cout << "source image is too small" << endl;
-		return source;
-	}
-	int channel = source.channels();
-	if (channel == 1){
-		colorType = COLOR_WHITE;
-	}
-	Mat result(size,size,CV_8UC1);
-
-	int sum = 0;
-	int channelCounter = 0;
-
-	for (int y = 0; y < size; y++){
-		for (int x = 0; x < size; x++){
-			sum = 0;
-			for (int blockY = 0; blockY < blockSizeY; blockY++){
-				for (int blockX = 0; blockX < blockSizeX; blockX++){
-					channelCounter = 0;
-					switch (colorType){
-					case COLOR_WHITE:
-						for (int c = 0; c < channel; c++){
-							if (source.data[((y*blockSizeY) + blockY)*width*channel + ((x*blockSizeX) + blockX)*channel + c] == 255){
-								channelCounter++;
-							}
-						}
-						break;
-					case COLOR_RED:
-						if (source.data[((y*blockSizeY) + blockY)*width*channel + ((x*blockSizeX) + blockX)*channel + 0] == 0){
-							channelCounter++;
-						}
-						if (source.data[((y*blockSizeY) + blockY)*width*channel + ((x*blockSizeX) + blockX)*channel + 1] == 0){
-							channelCounter++;
-						}
-						if (source.data[((y*blockSizeY) + blockY)*width*channel + ((x*blockSizeX) + blockX)*channel + 2] == 255){
-							channelCounter++;
-						}
-						break;
-					}
-					if (channelCounter == channel){
-						sum++;
-					}
-				}
-			}
-			result.data[y*size + x] = sum;
-		}
-	}
-	return result;
-}
-
-void Equalization(Mat source){		//GrayScale에 대해서만 적용할 수 있음.
-	int width = source.cols;
-	int height = source.rows;
-	int channel = source.channels();
-	int lowest = 255;
-	int highest = 0;
-	int LUT[256];
-	for (int y = 0; y < height; y++){
-		for (int x = 0; x < width; x++){
-			if (source.data[y*width + x] < lowest){
-				lowest = source.data[y*width + x];
-			}
-			if (source.data[y*width + x] > highest){
-				highest = source.data[y*width + x];
-			}
-		}
-	}
-
-	float rate = 255 / ((float)(highest - lowest));
-	
-	for (int i = 0; i < 256; i++){
-		if (i >= lowest && i <= highest){
-			LUT[i] = (i - lowest)*rate;
-		}
-	}
-
-	for (int y = 0; y < height; y++){
-		for (int x = 0; x < width; x++){
-			source.data[y*width + x] = LUT[source.data[y*width + x]];
-		}
-	}
 }
 
 Mat FeatureCatch(Mat source){
 	source = GrayScale(source);
 	//EdgeDetection(source, 128, COLOR_RED);
 	//source = Simplification(source, MATCH_SIZE, COLOR_RED);
-	source = Resizing(source, MATCH_SIZE);
-	Equalization(source);
+	source = Resizing(source, MATCH_SIZE_X, MATCH_SIZE_Y);
 	return source;
 }
 
-int GetRMSE9(Mat source1, Mat source2){		//root mean square error
-	if (source1.cols != source2.cols){
+int GetSimilarity4(Mat sample, Mat feature){
+	if (sample.cols != feature.cols){
 		cout << "Image not matched" << endl;
 		return -1;
 	}
-	if (source1.cols != source2.cols){
+	if (sample.rows != feature.rows){
 		cout << "Image not matched" << endl;
 		return -1;
 	}
-	int width = source1.cols;
-	int height = source1.rows;
+
+	int width = sample.cols;
+	int height = sample.rows;
 	int difference = 0;
 	int rmse = 0;
-	for (int y = 0; y < height-2; y++){
-		for (int x = 0; x < width-2; x++){
-			for (int i = 0; i < 3; i++){
-				for (int j = 0; j < 3; j++){
-					if (source1.data[(y + i)*width + (x + j)] != 0 && source2.data[y*width + x] != 0){
-						difference = source1.data[(y + i)*width + (x + j)] - source2.data[y*width + x];
+	for (int y = 0; y < height - 1; y++){
+		for (int x = 0; x < width - 1; x++){
+			for (int i = 0; i < 2; i++){
+				for (int j = 0; j < 2; j++){
+					if (feature.data[(y + i)*width + (x + j)] != 0){
+						difference = feature.data[(y + i)*width + (x + j)] - sample.data[y*width + x];
+						rmse -= sqrt((double)(difference*difference));
+					}
+				}
+			}
+		}
+	}
+	return rmse / 10;
+}
+
+int GetSimilarity4(Mat sample, Mat feature, Mat antiFeature){
+	if (sample.cols != feature.cols || sample.cols != antiFeature.cols){
+		cout << "Image not matched" << endl;
+		return -1;
+	}
+	if (sample.rows != feature.rows || sample.rows != antiFeature.rows){
+		cout << "Image not matched" << endl;
+		return -1;
+	}
+
+	int width = sample.cols;
+	int height = sample.rows;
+	int difference = 0;
+	int rmse = 0;
+	for (int y = 0; y < height - 1; y++){
+		for (int x = 0; x < width - 1; x++){
+			for (int i = 0; i < 2; i++){
+				for (int j = 0; j < 2; j++){
+					if (feature.data[(y + i)*width + (x + j)] != 255){
+						difference = feature.data[(y + i)*width + (x + j)] - sample.data[y*width + x];
+						rmse -= sqrt((double)(difference*difference));
+						difference = antiFeature.data[(y + i)*width + (x + j)] - sample.data[y*width + x];
 						rmse += sqrt((double)(difference*difference));
 					}
 				}
@@ -272,6 +240,8 @@ int GetRMSE9(Mat source1, Mat source2){		//root mean square error
 		}
 	}
 	return rmse;
+
+
 }
 
 int GetRMSE4(Mat source1, Mat source2){		//root mean square error
@@ -279,7 +249,7 @@ int GetRMSE4(Mat source1, Mat source2){		//root mean square error
 		cout << "Image not matched" << endl;
 		return -1;
 	}
-	if (source1.cols != source2.cols){
+	if (source1.rows != source2.rows){
 		cout << "Image not matched" << endl;
 		return -1;
 	}
@@ -291,10 +261,8 @@ int GetRMSE4(Mat source1, Mat source2){		//root mean square error
 		for (int x = 0; x < width - 1; x++){
 			for (int i = 0; i < 2; i++){
 				for (int j = 0; j < 2; j++){
-					if (source1.data[(y + i)*width + (x + j)] != 0 && source2.data[y*width + x] != 0){
-						difference = source1.data[(y + i)*width + (x + j)] - source2.data[y*width + x];
-						rmse += sqrt((double)(difference*difference));
-					}
+					difference = source1.data[(y + i)*width + (x + j)] - source2.data[y*width + x];
+					rmse += sqrt((double)(difference*difference));
 				}
 			}
 		}
@@ -302,75 +270,110 @@ int GetRMSE4(Mat source1, Mat source2){		//root mean square error
 	return rmse;
 }
 
-int GetRMSE(Mat source1, Mat source2){		//root mean square error
-	if (source1.cols != source2.cols){
-		cout << "Image not matched" << endl;
-		return -1;
+void AddFeature(Mat edgeFeatureImage, Mat intFeatureImage, Mat antiIntFeatureImage, Mat sample, int* sampleCount){
+	int intensitySum = 0;
+	int reverseSum = 0;
+
+	Mat edgeSample = sample.clone();
+	sample = GrayScale(sample);
+	Mat grayBuffer = sample.clone();
+
+	sample = Resizing(sample, MATCH_SIZE_X, MATCH_SIZE_Y);
+	for (int y = 0; y < MATCH_SIZE_Y; y++){
+		for (int x = 0; x < MATCH_SIZE_X; x++){
+			intensitySum = intFeatureImage.data[y*MATCH_SIZE_X + x] * (*sampleCount) + sample.data[y*MATCH_SIZE_X + x];
+			reverseSum = antiIntFeatureImage.data[y*MATCH_SIZE_X + x] * (*sampleCount) + 255 - sample.data[y*MATCH_SIZE_X + x];
+			intFeatureImage.data[y*MATCH_SIZE_X + x] = intensitySum / ((*sampleCount) + 1);
+			antiIntFeatureImage.data[y*MATCH_SIZE_X + x] = reverseSum / ((*sampleCount) + 1);
+		}
 	}
-	if (source1.cols != source2.cols){
-		cout << "Image not matched" << endl;
-		return -1;
-	}
-	int width = source1.cols;
-	int height = source1.rows;
-	int difference = 0;
-	int rmse = 0;
-	for (int y = 0; y < height - 1; y++){
-		for (int x = 0; x < width - 1; x++){
-			if (source1.data[y * width + x] != 0 && source2.data[y * width + x] != 0){
-				difference = source1.data[y * width + x] - source2.data[y*width + x];
-				rmse += sqrt((double)(difference*difference));
+
+	EdgeDetection(edgeSample, 128, COLOR_RED);
+	int width = edgeSample.cols;
+	int height = edgeSample.rows;
+	for (int y = 0; y < height; y++){
+		for (int x = 0; x < width; x++){
+			if (edgeSample.data[y*width * 3 + x * 3 + 0] == 0 && edgeSample.data[y*width * 3 + x * 3 + 1] == 0 && edgeSample.data[y*width * 3 + x * 3 + 2] == 255){
+				grayBuffer.data[y*width + x] = 255;
+			}
+			else{
+				grayBuffer.data[y*width + x] = 0;
 			}
 		}
 	}
-	return rmse;
-}
+	grayBuffer = Resizing(grayBuffer, MATCH_SIZE_X, MATCH_SIZE_Y);
 
-void AddFeature(Mat featureImage, Mat antiFeatureImage, Mat sample, int* sampleCount){
-	int intensitySum = 0;
-	int reverseSum = 0;
-	sample = Resizing(sample, MATCH_SIZE);
-	//Equalization(sample);
-	//Binarization(sample);
-	for (int y = 0; y < MATCH_SIZE; y++){
-		for (int x = 0; x < MATCH_SIZE; x++){
-			intensitySum = featureImage.data[y*MATCH_SIZE + x] * (*sampleCount) + sample.data[y*MATCH_SIZE + x];
-			reverseSum = antiFeatureImage.data[y*MATCH_SIZE + x] * (*sampleCount) + 255 - sample.data[y*MATCH_SIZE + x];
-			featureImage.data[y*MATCH_SIZE + x] = intensitySum / ((*sampleCount) + 1);
-			antiFeatureImage.data[y*MATCH_SIZE + x] = reverseSum / ((*sampleCount) + 1);
+	intensitySum = 0;
+	for (int y = 0; y < MATCH_SIZE_Y; y++){
+		for (int x = 0; x < MATCH_SIZE_X; x++){
+			intensitySum = edgeFeatureImage.data[y*MATCH_SIZE_X + x] * (*sampleCount) + grayBuffer.data[y*MATCH_SIZE_X + x];
+			edgeFeatureImage.data[y*MATCH_SIZE_X + x] = intensitySum / ((*sampleCount) + 1);
 		}
 	}
 	(*sampleCount)++;
 }
 
 int main() {
-	Mat featureOfCar(MATCH_SIZE, MATCH_SIZE, CV_8UC1);
-	Mat antiFeatureOfCar(MATCH_SIZE, MATCH_SIZE, CV_8UC1);
+	Mat intFeatureOfCar(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC1);
+	Mat antiIntFeatureOfCar(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC1);
+	Mat edgeFeatureOfCar(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC1);
 	int sampleCount = 0;
 	int* scPtr = &sampleCount;
 	//featureOfCar = Resizing(GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car.jpg", CV_LOAD_IMAGE_COLOR)),MATCH_SIZE);
-	AddFeature(featureOfCar, antiFeatureOfCar, GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car.jpg", CV_LOAD_IMAGE_COLOR)), scPtr);
-	AddFeature(featureOfCar, antiFeatureOfCar, GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car2.jpg", CV_LOAD_IMAGE_COLOR)), scPtr);
-	AddFeature(featureOfCar, antiFeatureOfCar, GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car3.jpg", CV_LOAD_IMAGE_COLOR)), scPtr);
-	AddFeature(featureOfCar, antiFeatureOfCar, GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car4.jpg", CV_LOAD_IMAGE_COLOR)), scPtr);
-	AddFeature(featureOfCar, antiFeatureOfCar, GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car5.jpg", CV_LOAD_IMAGE_COLOR)), scPtr);
-	AddFeature(featureOfCar, antiFeatureOfCar, GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car6.jpg", CV_LOAD_IMAGE_COLOR)), scPtr);
-	AddFeature(featureOfCar, antiFeatureOfCar, GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car7.jpg", CV_LOAD_IMAGE_COLOR)), scPtr);
-	AddFeature(featureOfCar, antiFeatureOfCar, GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car8.jpg", CV_LOAD_IMAGE_COLOR)), scPtr);
+	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("C:\\Users\\CIEN\\Desktop\\carData\\car.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
+	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("C:\\Users\\CIEN\\Desktop\\carData\\car2.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
+	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("C:\\Users\\CIEN\\Desktop\\carData\\car3.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
+	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("C:\\Users\\CIEN\\Desktop\\carData\\car4.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
+	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("C:\\Users\\CIEN\\Desktop\\carData\\car5.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
+	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("C:\\Users\\CIEN\\Desktop\\carData\\car6.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
+	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("C:\\Users\\CIEN\\Desktop\\carData\\car7.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
+	AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread("C:\\Users\\CIEN\\Desktop\\carData\\car8.jpg", CV_LOAD_IMAGE_COLOR), scPtr);
 
-	compareImage = Resizing(GrayScale(imread("C:\\Users\\CIEN\\Desktop\\not02.jpg", CV_LOAD_IMAGE_COLOR)), MATCH_SIZE);
-	Equalization(compareImage);
-	//cout << "수치가 낮을수록 유사 : " << GetRMSE(featureOfCar, compareImage) << endl;
-	//cout << "수치가 높을수록 유사 : " << GetRMSE(antiFeatureOfCar, compareImage) << endl;
-	int similarity = GetRMSE4(antiFeatureOfCar, compareImage) - GetRMSE4(featureOfCar, compareImage);
-	cout << "유사도 : " << similarity << endl;
-	if (similarity > 1000000){
-		cout << "자동차 입니다!" << endl;
+	cout << "학습 데이터 구축" << endl;
+
+
+	compareImage = GrayScale(imread("C:\\Users\\CIEN\\Desktop\\samples\\Car\\Car-Rental1.jpg", CV_LOAD_IMAGE_COLOR));
+
+	int matchCount = 0;
+	int clipX = MATCH_SIZE_X;
+	int clipY = MATCH_SIZE_Y;
+	Mat compareClip(clipX, clipY, CV_8UC1);
+	float similarity = 0;
+	int width = compareImage.cols;
+	int height = compareImage.rows;
+	for (int y = 0; y < height - clipY; y+=3){
+		for (int x = 0; x < width - clipX; x += 3){
+			compareClip = Clipping(compareImage, clipX, clipY, x, y);
+
+			similarity = GetSimilarity4(compareClip, intFeatureOfCar, antiIntFeatureOfCar);
+			EdgeDetection(compareClip, 128, COLOR_WHITE);
+			similarity += GetSimilarity4(compareClip, edgeFeatureOfCar);
+			similarity /= (MATCH_SIZE_X * MATCH_SIZE_X);
+			cout << x << "," << y << " 유사도 : " << similarity << endl;
+			if (similarity > 70){
+				cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
+				imshow(x + "a" + y, compareClip);
+				cout << "자동차 입니다!" << endl;
+				matchCount++;
+
+				x += 10;
+				y += 10;
+				if (y >= height - clipY){
+					break;
+				}
+			}
+		}
+		if (matchCount > 10){
+			break;
+		}
 	}
+
 	cvNamedWindow("feature",CV_WINDOW_AUTOSIZE);
 	cvNamedWindow("compare",CV_WINDOW_AUTOSIZE);
-	imshow("feature", featureOfCar);
+	cvNamedWindow("edge", CV_WINDOW_AUTOSIZE);
+	imshow("feature", intFeatureOfCar);
 	imshow("compare", compareImage);
+	imshow("edge", edgeFeatureOfCar);
 
 	char ch = waitKey();	// 무한 대기
 
