@@ -11,7 +11,7 @@
 #define COLOR_WHITE 0
 #define COLOR_RED 1
 
-#define MATCH_SIZE_X 80
+#define MATCH_SIZE_X 100
 #define MATCH_SIZE_Y 60
 
 #define PI 3.14159
@@ -63,6 +63,7 @@ void hog(Mat source)
 			}
 		}
 	}
+
 
 	for (int y = 0; y < row; y++){
 		for (int x = 0; x < col; x++){
@@ -146,14 +147,24 @@ Mat GrayScale(Mat source){		//흑백이미지로 만듬. 채널도 1로 바뀜.
 }
 
 Mat Clipping(Mat source, int sizeX, int sizeY, int x, int y){
-	if (source.channels() != 1){
-		cout << "Clipping Error - channel must be 1" << endl;
-	}
 	int width = source.cols;
-	Mat result(sizeY, sizeX, CV_8UC1);
+	Mat result;
+	if (source.channels() == 1) {
+		result = Mat(sizeY, sizeX, CV_8UC1);
+	}
+	else if (source.channels() == 3) {
+		result = Mat(sizeY, sizeX, CV_8UC3);
+	}
+	else {
+		cout << "Clipping Error - channel must be 1 or 3" << endl;
+		return source;
+	}
+	int ch = source.channels();
 	for (int i = y; i < y + sizeY; i++){
-		for (int j = x; j < x + sizeX; j++){
-			result.data[(i - y)*sizeX + (j - x)] = source.data[i*width + j];
+		for (int j = x; j < x + sizeX; j++) {
+			for (int c = 0; c < ch; c++) {
+				result.data[(i - y)*sizeX*ch + (j - x)*ch + c] = source.data[i*width*ch + j*ch + c];
+			}
 		}
 	}
 	return result;
@@ -238,14 +249,10 @@ Mat Resizing(Mat source, int sizeX , int sizeY){
 	int height = source.rows;
 	float blockSizeX = source.cols / (float)sizeX;		//블럭의 사이즈
 	float blockSizeY = source.rows / (float)sizeY;		//블럭의 사이즈
-	int channel = source.channels();
-	if (source.channels() != 1){
-		cout << "Fail to Resizing - channel must be 1" << endl;
-		return source;
-	}
+	int ch = source.channels();
 
-	int rowSum = 0;
-	int colSum = 0;
+	int rowSum[3] = { 0,0,0 };
+	int colSum[3] = { 0,0,0 };
 	int rowCount = 0;
 	int colCount = 0;
 	int limitX = 0;
@@ -253,25 +260,45 @@ Mat Resizing(Mat source, int sizeX , int sizeY){
 	int cumulateX = 0;
 	int cumulateY = 0;
 
-	Mat result(sizeY, sizeX, CV_8UC1);
+	Mat result;
+	if (ch == 1) {
+		result = Mat(sizeY, sizeX, CV_8UC1);
+	}
+	else if (ch == 3){
+		result = Mat(sizeY, sizeX, CV_8UC3);
+	}
+	else {
+		cout << "Resizing Error - channel is ????" << endl;
+		return source;
+	}
 
 	for (int y = 0; y < sizeY; y++){
 		limitY = (blockSizeY * (y + 1));
 		for (int x = 0; x < sizeX; x++){
 			limitX = (blockSizeX * (x + 1));
-			colSum = 0;
+			for (int c = 0; c < ch; c++) {
+				colSum[c] = 0;
+			}
 			colCount = 0;
 			for (cumulateY = (int)(blockSizeY * y); cumulateY < limitY ; cumulateY++){
-				rowSum = 0;
+				for (int c = 0; c < ch; c++) {
+					rowSum[c] = 0;
+				}
 				rowCount = 0;
 				for (cumulateX = (int)(blockSizeX * x); cumulateX < limitX; cumulateX++){
-					rowSum += source.data[cumulateY * width + cumulateX];
+					for (int c = 0; c < ch; c++) {
+						rowSum[c] += source.data[cumulateY * width * ch + cumulateX *ch + c];
+					}
 					rowCount++;
 				}
-				colSum += rowSum / rowCount;
+				for (int c = 0; c < ch; c++) {
+					colSum[c] += rowSum[c] / rowCount;
+				}
 				colCount++;
 			}
-			result.data[y*sizeX + x] = colSum / colCount;
+			for (int c = 0; c < ch; c++) {
+				result.data[y*sizeX*ch + x*ch + c] = colSum[c] / colCount;
+			}
 		}
 	}
 	return result;
@@ -294,6 +321,7 @@ int GetSimilarity4(Mat sample, Mat feature){
 		cout << "Image not matched" << endl;
 		return -1;
 	}
+	int ch = sample.channels();
 
 	int width = sample.cols;
 	int height = sample.rows;
@@ -303,15 +331,17 @@ int GetSimilarity4(Mat sample, Mat feature){
 		for (int x = 0; x < width - 1; x++){
 			for (int i = 0; i < 2; i++){
 				for (int j = 0; j < 2; j++){
-					if (feature.data[(y + i)*width + (x + j)] != 0){
-						difference = feature.data[(y + i)*width + (x + j)] - sample.data[y*width + x];
-						rmse -= sqrt((double)(difference*difference));
+					for (int c = 0; c < ch; c++) {
+						if (feature.data[(y + i)*width*ch + (x + j)*ch + c] != 0) {
+							difference = feature.data[(y + i)*width*ch + (x + j)*ch + c] - sample.data[y*width*ch + x*ch + c];
+							rmse -= sqrt((double)(difference*difference));
+						}
 					}
 				}
 			}
 		}
 	}
-	return rmse / 10;
+	return rmse / ch;
 }
 
 int GetSimilarity4(Mat sample, Mat feature, Mat antiFeature){
@@ -323,6 +353,7 @@ int GetSimilarity4(Mat sample, Mat feature, Mat antiFeature){
 		cout << "Image not matched" << endl;
 		return -1;
 	}
+	int ch = sample.channels();
 
 	int width = sample.cols;
 	int height = sample.rows;
@@ -332,17 +363,19 @@ int GetSimilarity4(Mat sample, Mat feature, Mat antiFeature){
 		for (int x = 0; x < width - 1; x++){
 			for (int i = 0; i < 2; i++){
 				for (int j = 0; j < 2; j++){
-					if (feature.data[(y + i)*width + (x + j)] != 255){
-						difference = feature.data[(y + i)*width + (x + j)] - sample.data[y*width + x];
-						rmse -= sqrt((double)(difference*difference));
-						difference = antiFeature.data[(y + i)*width + (x + j)] - sample.data[y*width + x];
-						rmse += sqrt((double)(difference*difference));
+					for (int c = 0; c < ch; c++) {
+						if (feature.data[(y + i)*width + (x + j)] != 255) {
+							difference = feature.data[(y + i)*width*ch + (x + j)*ch + c] - sample.data[y*width*ch + x*ch + c];
+							rmse -= sqrt((double)(difference*difference));
+							difference = antiFeature.data[(y + i)*width*ch + (x + j)*ch + c] - sample.data[y*width*ch + x*ch + c];
+							rmse += sqrt((double)(difference*difference));
+						}
 					}
 				}
 			}
 		}
 	}
-	return rmse;
+	return rmse / ch;
 
 
 }
@@ -371,6 +404,25 @@ int GetRMSE4(Mat source1, Mat source2){		//root mean square error
 		}
 	}
 	return rmse;
+}
+
+void AddFeature(Mat intFeatureImage, Mat antiIntFeatureImage, Mat sample, int* sampleCount) { //3 Channel 전용
+	int intensitySum = 0;
+	int reverseSum = 0;
+	int ch = sample.channels();
+
+	sample = Resizing(sample, MATCH_SIZE_X, MATCH_SIZE_Y);
+	for (int y = 0; y < MATCH_SIZE_Y; y++) {
+		for (int x = 0; x < MATCH_SIZE_X; x++) {
+			for (int c = 0; c < ch; c++) {
+				intensitySum = intFeatureImage.data[y*MATCH_SIZE_X*ch + x*ch + c] * (*sampleCount) + sample.data[y*MATCH_SIZE_X*ch + x*ch + c];
+				reverseSum = antiIntFeatureImage.data[y*MATCH_SIZE_X*ch + x*ch + c] * (*sampleCount) + 255 - sample.data[y*MATCH_SIZE_X*ch + x*ch + c];
+				intFeatureImage.data[y*MATCH_SIZE_X*ch + x*ch + c] = intensitySum / ((*sampleCount) + 1);
+				antiIntFeatureImage.data[y*MATCH_SIZE_X*ch + x*ch + c] = reverseSum / ((*sampleCount) + 1);
+			}
+		}
+	}
+	(*sampleCount)++;
 }
 
 void AddFeature(Mat edgeFeatureImage, Mat intFeatureImage, Mat antiIntFeatureImage, Mat sample, int* sampleCount){
@@ -416,7 +468,25 @@ void AddFeature(Mat edgeFeatureImage, Mat intFeatureImage, Mat antiIntFeatureIma
 	(*sampleCount)++;
 }
 
+void DrawRect(Mat source, int startX, int startY, int sizeX, int sizeY) {
+	int ch = source.channels();
+	int width = source.cols;
+	int height = source.rows;
+
+	for (int y = startY; y < startY + sizeY; y++) {
+		for (int x = startX; x < startX + sizeX; x++) {
+			if (x == startX || x == startX + sizeX - 1 || y == startY || y == startY + sizeY - 1) {
+				source.data[y * width * ch + x * ch + 0] = 0;
+				source.data[y * width * ch + x * ch + 1] = 0;
+				source.data[y * width * ch + x * ch + 2] = 255;
+			}
+		}
+	}
+}
+
 int main() {
+	Mat intFeatureOfCar3(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC3);
+	Mat antiIntFeatureOfCar3(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC3);
 	Mat intFeatureOfCar(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC1);
 	Mat antiIntFeatureOfCar(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC1);
 	Mat edgeFeatureOfCar(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC1);
@@ -426,8 +496,18 @@ int main() {
 
 	string filePath = "..\\database\\carData\\uzLeft\\";
 	string fileName = "uzLeft01.jpg";
-	for (int i = 0; i < 19; i++) {
+	/*for (int i = 0; i < 19; i++) {
 		AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread(filePath + fileName, CV_LOAD_IMAGE_COLOR), scPtr);
+		fileName[7]++;
+		if (fileName[7] > '9') {
+			fileName[7] -= 10;
+			fileName[6] ++;
+		}
+	}*/
+
+	for (int i = 0; i < 19; i++) {
+		hog(imread(filePath + fileName, CV_LOAD_IMAGE_COLOR));
+		AddFeature(intFeatureOfCar3, antiIntFeatureOfCar3, grad_xr, scPtr);
 		fileName[7]++;
 		if (fileName[7] > '9') {
 			fileName[7] -= 10;
@@ -438,19 +518,21 @@ int main() {
 	cout << "학습 데이터 구축" << endl;
 
 	//compareImage = GrayScale(imread("..\\samples\\Car\\10.jpg", CV_LOAD_IMAGE_COLOR));
-	compareImage = imread("..\\database\\carData\\uzLeft\\uzLeft01.jpg");
+	compareImage = imread("..\\samples\\Car\\10.jpg", CV_LOAD_IMAGE_COLOR);
+	Mat compareOriginal = compareImage.clone();
 	hog(compareImage);
+	compareImage = grad_xr;
 	
-	cvNamedWindow("xr", CV_WINDOW_AUTOSIZE);
+/*	cvNamedWindow("xr", CV_WINDOW_AUTOSIZE);
 	imshow("xr", grad_xr);
 	cvNamedWindow("yu", CV_WINDOW_AUTOSIZE);
 	imshow("yu", grad_yu);
 	cvNamedWindow("angles", CV_WINDOW_AUTOSIZE);
 	imshow("angles", angles);
 	cvNamedWindow("magnit", CV_WINDOW_AUTOSIZE);
-	imshow("magnit", magnit);
+	imshow("magnit", magnit);*/
 
-	/*
+	
 	int matchCount = 0;
 	int clipX = MATCH_SIZE_X;
 	int clipY = MATCH_SIZE_Y;
@@ -462,17 +544,19 @@ int main() {
 		for (int x = 0; x < width - clipX; x += 3){
 			compareClip = Clipping(compareImage, clipX, clipY, x, y);
 
-			similarity = GetSimilarity4(compareClip, intFeatureOfCar, antiIntFeatureOfCar);
-			EdgeDetection(compareClip, 128, COLOR_WHITE);
-			similarity += GetSimilarity4(compareClip, edgeFeatureOfCar);
+			similarity = GetSimilarity4(compareClip, intFeatureOfCar3);
+			//EdgeDetection(compareClip, 128, COLOR_WHITE);
+			//similarity += GetSimilarity4(compareClip, edgeFeatureOfCar);
 			similarity /= (MATCH_SIZE_X * MATCH_SIZE_Y);
 			cout << x << "," << y << " 유사도 : " << similarity << endl;
-			if (similarity > 150){
-				cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
-				imshow(x + "a" + y, compareClip);
+			if (similarity > -10){
+				//cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
+				//imshow(x + "a" + y, compareClip);
 				cout << "자동차 입니다!" << endl;
 				matchCount++;
 
+				DrawRect(compareOriginal, x, y, clipX, clipY);
+				
 				//x += 10;
 				//y += 10;
 				if (y >= height - clipY){
@@ -481,18 +565,20 @@ int main() {
 			}
 		}
 		if (matchCount > 10){
-			break;
+			//break;
 		}
 	}
 	
 	cvNamedWindow("feature",CV_WINDOW_AUTOSIZE);
 	cvNamedWindow("compare",CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("edge", CV_WINDOW_AUTOSIZE);
+	cvNamedWindow("compareO", CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("edge", CV_WINDOW_AUTOSIZE);
 
-	imshow("feature", intFeatureOfCar);
+	imshow("feature", intFeatureOfCar3);
 	imshow("compare", compareImage);
-	imshow("edge", edgeFeatureOfCar);
-	*/
+	imshow("compareO", compareOriginal);
+	//imshow("edge", edgeFeatureOfCar);
+	
 	char ch = waitKey();	// 무한 대기
 
 
