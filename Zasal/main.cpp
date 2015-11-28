@@ -8,8 +8,11 @@
 #include<math.h>
 
 #define COLOR_NON -1
-#define COLOR_WHITE 0
-#define COLOR_RED 1
+#define COLOR_WHITE 5
+#define COLOR_RED 0
+#define COLOR_BLUE 1
+#define COLOR_GREEN 2
+#define COLOR_MAGENTA 3
 
 #define MATCH_SIZE_X 100
 #define MATCH_SIZE_Y 60
@@ -19,17 +22,44 @@
 using namespace cv;
 using namespace std;
 
-Mat compareImage, src, dst,temp, grad_xr, grad_yu, angles, magnit, angles2, magnit2;
+Mat compareImage, src, dst,temp;
+
+int* grad_xr, *grad_yu;
+float* angles, *magnit, *angles2, *magnit2, *H;
+int hogX, hogY;
 
 int *hist;
 
+int nwin_x = 3, nwin_y = 3;
+int B = 9;
 
 void hog(Mat source)
 {
-	int nwin_x = 3, nwin_y = 3, cont = 0;
-	int B = 9, ch = source.channels();
+	if (grad_xr != NULL) {
+		delete(grad_xr);
+	}
+	if (grad_yu != NULL) {
+		delete(grad_yu);
+	}
+	if (angles != NULL) {
+		delete(angles);
+	}
+	if (magnit != NULL) {
+		delete(magnit);
+	}
+	if (angles2 != NULL) {
+		delete(angles2);
+	}
+	if (magnit2 != NULL) {
+		delete(magnit2);
+	}
+
+
+	int ch = source.channels();
 	int row = source.rows;
 	int col = source.cols;
+	hogX = col;
+	hogY = row;
 	hist = (int*)calloc(nwin_x * nwin_y * B, sizeof(int));
 	int m = sqrt(row / 2), bin = 0;
 	if (col == 1){
@@ -40,25 +70,32 @@ void hog(Mat source)
 	int hx[] = { -1, 0, 1 };
 	int hy[] = { 1, 0, -1 };
 	float norm_ = 0;
+	H = new float[nwin_x * nwin_y * B];
 	float H2[9] {0, };
 	float ang_lim = 0;
-	grad_xr = Mat(row, col, CV_8UC3);	grad_yu = Mat(row, col, CV_8UC3);
-	angles = Mat(row, col, CV_8UC3);	magnit = Mat(row, col, CV_8UC3);
+	grad_xr = new int[row * col * 3];	grad_yu = new int[row * col * 3];
+	angles = new float[row * col * 3];	magnit = new float[row * col * 3];
 	//
 	for (int y = 0; y < row; y++){
 		for (int x = 0; x < col; x++){
 			for (int z = 0; z < 3; z++){
 				if (x == 0){
-					grad_xr.data[y*source.cols*ch + x*ch + z] = (int)source.data[y*source.cols*ch + (x + 1)*ch + z];
-					grad_yu.data[y*source.cols*ch + x*ch + z] = -(int)source.data[y*source.cols*ch + (x + 1)*ch + z];
+					grad_xr[y*source.cols*ch + x*ch + z] = source.data[y*source.cols*ch + (x + 1)*ch + z];
 				}
 				else if (x == col - 1){
-					grad_xr.data[y*source.cols*ch + x*ch + z] = -(int)source.data[y*source.cols*ch + (x - 1)*ch + z];
-					grad_yu.data[y*source.cols*ch + x*ch + z] = (int)source.data[y*source.cols*ch + (x - 1)*ch + z];
+					grad_xr[y*source.cols*ch + x*ch + z] = -source.data[y*source.cols*ch + (x - 1)*ch + z];
 				}
 				else{
-					grad_xr.data[y*source.cols*ch + x*ch + z] = (int)source.data[y*source.cols*ch + (x + 1)*ch + z] - (int)source.data[y*source.cols*ch + (x - 1)*ch + z];
-					grad_yu.data[y*source.cols*ch + x*ch + z] = -(int)source.data[y*source.cols*ch + (x + 1)*ch + z] + (int)source.data[y*source.cols*ch + (x - 1)*ch + z];
+					grad_xr[y*source.cols*ch + x*ch + z] = source.data[y*source.cols*ch + (x + 1)*ch + z] - source.data[y*source.cols*ch + (x - 1)*ch + z];
+				}
+				if (y == 0) {
+					grad_yu[y*source.cols*ch + x*ch + z] = -source.data[(y + 1)*source.cols*ch + x*ch + z];
+				}
+				else if (y == row - 1) {
+					grad_yu[y*source.cols*ch + x*ch + z] = source.data[(y - 1)*source.cols*ch + x*ch + z];
+				}
+				else {
+					grad_yu[y*source.cols*ch + x*ch + z] = -source.data[(y + 1)*source.cols*ch + x*ch + z] + source.data[(y - 1)*source.cols*ch + x*ch + z];
 				}
 			}
 		}
@@ -68,59 +105,140 @@ void hog(Mat source)
 	for (int y = 0; y < row; y++){
 		for (int x = 0; x < col; x++){
 			for (int z = 0; z < ch; z++){
-				angles.data[y*source.cols*ch + x*ch + z] = atan2(grad_xr.data[y*source.cols*ch + x*ch + z], grad_yu.data[y*source.cols*ch + x*ch + z]);
-				magnit.data[y*source.cols*ch + x*ch + z] = grad_xr.data[y*source.cols*ch + x*ch + z] * grad_xr.data[y*source.cols*ch + x*ch + z] +
-				grad_yu.data[y*source.cols*ch + x*ch + z] * grad_yu.data[y*source.cols*ch + x*ch + z];
-				magnit.data[y*source.cols*ch + x*ch + z] = pow(magnit.data[y*source.cols*ch + x*ch + z], 5);
+				angles[y*source.cols*ch + x*ch + z] = atan2(grad_xr[y*source.cols*ch + x*ch + z], grad_yu[y*source.cols*ch + x*ch + z]);
+				magnit[y*source.cols*ch + x*ch + z] = grad_xr[y*source.cols*ch + x*ch + z] * grad_xr[y*source.cols*ch + x*ch + z] +
+				grad_yu[y*source.cols*ch + x*ch + z] * grad_yu[y*source.cols*ch + x*ch + z];
+				magnit[y*source.cols*ch + x*ch + z] = sqrt(magnit[y*source.cols*ch + x*ch + z]);
 			}
 		}
 	}
 	
-	angles2 = Mat(step_y * 2, step_x * 2, CV_8UC3);
-	magnit2 = Mat(step_y * 2, step_x * 2, CV_8UC3);
+	angles2 = new float[step_y * step_x * 12];
+	magnit2 = new float[step_y * step_x * 12];
 	int K = 0;
 	for (int y = 0; y < nwin_y; y++){
 		for (int x = 0; x < nwin_x; x++){
-			cont++;
 
 			for (int i = y*step_y; i < (y + 2)*step_y; i++) {
 				for (int j = x*step_x; j < (x + 2)*step_x; j++) {
 					for (int c = 0; c < ch; c++) {
-						angles2.data[(i - (y * step_y)) * 2 * step_x * ch + (j - (x * step_x)) * ch + c] = angles.data[i * angles.cols * ch + j * ch + c];
-						magnit2.data[(i - (y * step_y)) * 2 * step_x * ch + (j - (x * step_x)) * ch + c] = magnit.data[i * angles.cols * ch + j * ch + c];
+						angles2[(i - (y * step_y)) * 2 * step_x * ch + (j - (x * step_x)) * ch + c] = angles[i * hogX * ch + j * ch + c];
+						magnit2[(i - (y * step_y)) * 2 * step_x * ch + (j - (x * step_x)) * ch + c] = magnit[i * hogX * ch + j * ch + c];
 					}
 				}
 			}
-			K = angles2.rows * angles2.cols * ch;
+			K = step_y * step_x * 12;
 
 
-			bin = 0;
 			// H2 = zeros(b,1);
-			for (int x = 0; x < 9; x++)
+			for (int x = 0; x < B; x++)
 				H2[x] = 0;
 			// 2 for loop
-			for (ang_lim = -PI + 2 * PI / B; ang_lim < PI; ang_lim += 2 * PI / B) {
-				bin++;
+			for (bin = 0, ang_lim = -PI + 2 * PI / B; bin < B; ang_lim += 2 * PI / B, bin++) {
 				for (int x = 0; x < K; x++){
-					if (angles2.data[x] < ang_lim){
-						angles2.data[x] = 100;
-						H2[bin] += magnit2.data[x];
+					if (angles2[x] < ang_lim){
+						angles2[x] = 100;
+						H2[bin] += magnit2[x];
 					}
 				}
 			}
+
+			norm_ = 0;
 			// H2 = H2/(norm(H2) +0.01);
-			for (int x = 0; x < 9; x++)
-				norm_ += H2[x];
-			norm_ /= 9;
-			// H((cont-1)*B*1 : cont*B,1) = H2;
-			for (int x = 0; x < 9; x++){
-				H2[x] /= (norm_ + 0.01);
-			} norm_ = 0;
+			for (int i = 0; i < B; i++) {
+				norm_ += H2[i] * H2[i];
+			}
+			norm_ = sqrt(norm_);
+			for (int i = 0; i < B; i++){
+				H2[i] /= (norm_ + 0.01);
+			}
+			// H((cont-1)*B+1:cont*B,1)=H2;
+			for (int b = 0; b < B; b++) {
+				H[y*nwin_x*B + x*B + b] = H2[b];
+			}
+		}
+	}
+}
+
+void hogClip(int sizeX, int sizeY, int startX, int startY) {
+	int bin = 0;
+	int ch = 1;
+	int step_x = floor(sizeX / (nwin_x + 1));
+	int step_y = floor(sizeY / (nwin_y + 1));
+	angles2 = new float[step_y * step_x * 4];
+	magnit2 = new float[step_y * step_x * 4];
+	float norm_ = 0;
+	H = new float[nwin_x * nwin_y * B];
+	float H2[9]{ 0, };
+	float ang_lim = 0;
+	int K = 0;
+	for (int y = 0; y < nwin_y; y++) {
+		for (int x = 0; x < nwin_x; x++) {
+			for (int i = y*step_y; i < (y + 2)*step_y; i++) {
+				for (int j = x*step_x; j < (x + 2)*step_x; j++) {
+					angles2[(i - (y * step_y)) * 2 * step_x + (j - (x * step_x))] = angles[(i + startX) * hogX + (j + startY)];
+					magnit2[(i - (y * step_y)) * 2 * step_x + (j - (x * step_x))] = magnit[(i + startX) * hogX + (j + startY)];
+				}
+			}
+			K = step_y * step_x * 4;
+
+
+			// H2 = zeros(b,1);
+			for (int x = 0; x < B; x++)
+				H2[x] = 0;
+			// 2 for loop
+			for (bin = 0, ang_lim = -PI + 2 * PI / B; bin < B; ang_lim += 2 * PI / B, bin++) {
+				for (int x = 0; x < K; x++) {
+					if (angles2[x] < ang_lim) {
+						angles2[x] = 100;
+						H2[bin] += magnit2[x];
+					}
+				}
+			}
+
+			norm_ = 0;
+			// H2 = H2/(norm(H2) +0.01);
+			for (int i = 0; i < B; i++) {
+				norm_ += H2[i] * H2[i];
+			}
+			norm_ = sqrt(norm_);
+			for (int i = 0; i < B; i++) {
+				H2[i] /= (norm_ + 0.01);
+			}
+			// H((cont-1)*B+1:cont*B,1)=H2;
+			for (int b = 0; b < B; b++) {
+				H[y*nwin_x*B + x*B + b] = H2[b];
+				cout << H2[b] << endl;
+			}
+		}
+	}
+}
+
+Mat ReverseLR(Mat source) {
+	int ch = source.channels();
+	int width = source.cols;
+	int height = source.rows;
+	Mat result;
+	if (ch == 1) {
+		result = Mat(height, width, CV_8UC1);
+	}
+	else if (ch == 3){
+		result = Mat(height, width, CV_8UC3);
+	}
+	else {
+		cout << "Reverse Error" << endl;
+	}
+
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			for (int c = 0; c < ch; c++) {
+				result.data[(height - y - 1)*width*ch + (width - x - 1)*ch + c] = source.data[y*width*ch + x*ch + c];
+			}
 		}
 	}
 
+	return result;
 }
-
 
 Mat GrayScale(Mat source){		//흑백이미지로 만듬. 채널도 1로 바뀜.
 	int ch = source.channels();
@@ -164,6 +282,18 @@ Mat Clipping(Mat source, int sizeX, int sizeY, int x, int y){
 		for (int j = x; j < x + sizeX; j++) {
 			for (int c = 0; c < ch; c++) {
 				result.data[(i - y)*sizeX*ch + (j - x)*ch + c] = source.data[i*width*ch + j*ch + c];
+			}
+		}
+	}
+	return result;
+}
+
+float* Clipping(float source[], int width, int height, int ch, int sizeX, int sizeY, int x, int y) {
+	float* result = new float[sizeX * sizeY * ch];
+	for (int i = y; i < y + sizeY; i++) {
+		for (int j = x; j < x + sizeX; j++) {
+			for (int c = 0; c < ch; c++) {
+				result[(i - y)*sizeX*ch + (j - x)*ch + c] = source[i*width*ch + j*ch + c];
 			}
 		}
 	}
@@ -244,6 +374,55 @@ void EdgeDetection(Mat source, int threshold_, int colorType){	//채널수에 상관없
 	}
 }
 
+float* Resizing(float source[], int width, int height, int channel, int resultX, int resultY) {
+	float blockSizeX = width / (float)resultX;		//블럭의 사이즈
+	float blockSizeY = height / (float)resultY;		//블럭의 사이즈
+	int ch = channel;
+
+	float rowSum[3] = { 0,0,0 };
+	float colSum[3] = { 0,0,0 };
+	int rowCount = 0;
+	int colCount = 0;
+	int limitX = 0;
+	int limitY = 0;
+	int cumulateX = 0;
+	int cumulateY = 0;
+
+	float* result;
+	result = new float[resultY * resultX *ch];
+
+	for (int y = 0; y < resultY; y++) {
+		limitY = (blockSizeY * (y + 1));
+		for (int x = 0; x < resultX; x++) {
+			limitX = (blockSizeX * (x + 1));
+			for (int c = 0; c < ch; c++) {
+				colSum[c] = 0;
+			}
+			colCount = 0;
+			for (cumulateY = (int)(blockSizeY * y); cumulateY < limitY; cumulateY++) {
+				for (int c = 0; c < ch; c++) {
+					rowSum[c] = 0;
+				}
+				rowCount = 0;
+				for (cumulateX = (int)(blockSizeX * x); cumulateX < limitX; cumulateX++) {
+					for (int c = 0; c < ch; c++) {
+						rowSum[c] += source[cumulateY * width * ch + cumulateX *ch + c];
+					}
+					rowCount++;
+				}
+				for (int c = 0; c < ch; c++) {
+					colSum[c] += rowSum[c] / rowCount;
+				}
+				colCount++;
+			}
+			for (int c = 0; c < ch; c++) {
+				result[y*resultX*ch + x*ch + c] = colSum[c] / colCount;
+			}
+		}
+	}
+	return result;
+}
+
 Mat Resizing(Mat source, int sizeX , int sizeY){
 	int width = source.cols;
 	int height = source.rows;
@@ -310,6 +489,36 @@ Mat FeatureCatch(Mat source){
 	//source = Simplification(source, MATCH_SIZE, COLOR_RED);
 	source = Resizing(source, MATCH_SIZE_X, MATCH_SIZE_Y);
 	return source;
+}
+
+float GetSimilarity(float sample[], float feature[], int width, int height,  int ch) {
+
+	float difference = 0;
+	float rmse = 0;
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			for (int c = 0; c < ch; c++) {
+				difference = feature[y*width*ch + x*ch + c] - sample[y*width*ch + x*ch + c];
+				rmse -= sqrt(difference*difference);
+			}
+		}
+	}
+	return rmse;
+}
+
+float GetSimilarityReverse(float sample[], float feature[], int width, int height, int ch) {
+
+	float difference = 0;
+	float rmse = 0;
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			for (int c = 0; c < ch; c++) {
+				difference = feature[(height - y - 1)*width*ch + (width - x - 1)*ch + c] - sample[y*width*ch + x*ch + c];
+				rmse -= sqrt(difference*difference);
+			}
+		}
+	}
+	return rmse;
 }
 
 int GetSimilarity4(Mat sample, Mat feature){
@@ -425,6 +634,35 @@ void AddFeature(Mat intFeatureImage, Mat antiIntFeatureImage, Mat sample, int* s
 	(*sampleCount)++;
 }
 
+void AddFeature(float hogFeat[], float source[], int* sampleCount) {
+	float sum = 0;
+
+	for (int y = 0; y < nwin_y; y++) {
+		for (int x = 0; x < nwin_x; x++) {
+			for (int b = 0; b < B; b++) {
+				sum = hogFeat[y*nwin_x*B + x*B + b] * (*sampleCount) + source[y*nwin_x*B + x*B + b];
+				hogFeat[y*nwin_x*B + x*B + b] = sum / ((*sampleCount) + 1);
+			}
+		}
+	}
+	(*sampleCount)++;
+}
+
+void AddFeature(float angleFeat[], float source[],int width, int height, int ch, int* sampleCount){
+	float sum = 0;
+
+	source = Resizing(source, width, height, ch, MATCH_SIZE_X, MATCH_SIZE_Y);
+	for (int y = 0; y < MATCH_SIZE_Y; y++) {
+		for (int x = 0; x < MATCH_SIZE_X; x++) {
+			for (int c = 0; c < ch; c++) {
+				sum = angleFeat[y*MATCH_SIZE_X*ch + x*ch + c] * (*sampleCount) + source[y*MATCH_SIZE_X*ch + x*ch + c];
+				angleFeat[y*MATCH_SIZE_X*ch + x*ch + c] = sum / ((*sampleCount) + 1);
+			}
+		}
+	}
+	(*sampleCount)++;
+}
+
 void AddFeature(Mat edgeFeatureImage, Mat intFeatureImage, Mat antiIntFeatureImage, Mat sample, int* sampleCount){
 	int intensitySum = 0;
 	int reverseSum = 0;
@@ -468,7 +706,7 @@ void AddFeature(Mat edgeFeatureImage, Mat intFeatureImage, Mat antiIntFeatureIma
 	(*sampleCount)++;
 }
 
-void DrawRect(Mat source, int startX, int startY, int sizeX, int sizeY) {
+void DrawRect(Mat source, int startX, int startY, int sizeX, int sizeY , int color) {
 	int ch = source.channels();
 	int width = source.cols;
 	int height = source.rows;
@@ -476,17 +714,67 @@ void DrawRect(Mat source, int startX, int startY, int sizeX, int sizeY) {
 	for (int y = startY; y < startY + sizeY; y++) {
 		for (int x = startX; x < startX + sizeX; x++) {
 			if (x == startX || x == startX + sizeX - 1 || y == startY || y == startY + sizeY - 1) {
-				source.data[y * width * ch + x * ch + 0] = 0;
-				source.data[y * width * ch + x * ch + 1] = 0;
-				source.data[y * width * ch + x * ch + 2] = 255;
+				switch (color) {
+				case COLOR_WHITE:
+					source.data[y * width * ch + x * ch + 0] = 255;
+					source.data[y * width * ch + x * ch + 1] = 255;
+					source.data[y * width * ch + x * ch + 2] = 255;
+					break;
+				case COLOR_RED:
+					source.data[y * width * ch + x * ch + 0] = 0;
+					source.data[y * width * ch + x * ch + 1] = 0;
+					source.data[y * width * ch + x * ch + 2] = 255;
+					break;
+				case COLOR_BLUE:
+					source.data[y * width * ch + x * ch + 0] = 255;
+					source.data[y * width * ch + x * ch + 1] = 0;
+					source.data[y * width * ch + x * ch + 2] = 0;
+					break;
+				case COLOR_GREEN:
+					source.data[y * width * ch + x * ch + 0] = 0;
+					source.data[y * width * ch + x * ch + 1] = 255;
+					source.data[y * width * ch + x * ch + 2] = 0;
+					break;
+				case COLOR_MAGENTA:
+					source.data[y * width * ch + x * ch + 0] = 255;
+					source.data[y * width * ch + x * ch + 1] = 0;
+					source.data[y * width * ch + x * ch + 2] = 255;
+					break;
+				default:
+					source.data[y * width * ch + x * ch + 0] = 0;
+					source.data[y * width * ch + x * ch + 1] = 0;
+					source.data[y * width * ch + x * ch + 2] = 0;
+				}
 			}
 		}
 	}
 }
 
 int main() {
-	Mat intFeatureOfCar3(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC3);
-	Mat antiIntFeatureOfCar3(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC3);
+	//Mat intFeatureOfCar3(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC3);
+	//Mat antiIntFeatureOfCar3(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC3);
+	float* hogFeatureOfCarUZL = new float[nwin_x * nwin_y * B];
+	for (int i = 0; i < nwin_x * nwin_y * B; i++) {
+		hogFeatureOfCarUZL[i] = 0;
+	}
+	float* hogFeatureOfCarUZR = new float[nwin_x * nwin_y * B];
+	for (int i = 0; i < nwin_x * nwin_y * B; i++) {
+		hogFeatureOfCarUZR[i] = 0;
+	}
+	float* hogFeatureOfCarB = new float[nwin_x * nwin_y * B];
+	for (int i = 0; i < nwin_x * nwin_y * B; i++) {
+		hogFeatureOfCarB[i] = 0;
+	}
+	float* hogFeatureOfCarF = new float[nwin_x * nwin_y * B];
+	for (int i = 0; i < nwin_x * nwin_y * B; i++) {
+		hogFeatureOfCarF[i] = 0;
+	}
+
+	float* hogFeatureOfMan = new float[nwin_x * nwin_y * B];
+	for (int i = 0; i < nwin_x * nwin_y * B; i++) {
+		hogFeatureOfMan[i] = 0;
+	}
+
 	Mat intFeatureOfCar(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC1);
 	Mat antiIntFeatureOfCar(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC1);
 	Mat edgeFeatureOfCar(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC1);
@@ -494,20 +782,14 @@ int main() {
 	int* scPtr = &sampleCount;
 	//featureOfCar = Resizing(GrayScale(imread("C:\\Users\\CIEN\\Desktop\\carData\\car.jpg", CV_LOAD_IMAGE_COLOR)),MATCH_SIZE);
 
+	cout << "DataBase 로드중.." << endl;
 	string filePath = "..\\database\\carData\\uzLeft\\";
 	string fileName = "uzLeft01.jpg";
-	/*for (int i = 0; i < 19; i++) {
-		AddFeature(edgeFeatureOfCar, intFeatureOfCar, antiIntFeatureOfCar, imread(filePath + fileName, CV_LOAD_IMAGE_COLOR), scPtr);
-		fileName[7]++;
-		if (fileName[7] > '9') {
-			fileName[7] -= 10;
-			fileName[6] ++;
-		}
-	}*/
-
-	for (int i = 0; i < 19; i++) {
-		hog(imread(filePath + fileName, CV_LOAD_IMAGE_COLOR));
-		AddFeature(intFeatureOfCar3, antiIntFeatureOfCar3, grad_xr, scPtr);
+	for (int i = 1; i < 20; i++) {
+		hog(GrayScale(imread(filePath + fileName, CV_LOAD_IMAGE_COLOR)));
+		AddFeature(hogFeatureOfCarUZL, H, scPtr);
+		hog(GrayScale(ReverseLR(imread(filePath + fileName, CV_LOAD_IMAGE_COLOR))));
+		AddFeature(hogFeatureOfCarUZR, H, scPtr);
 		fileName[7]++;
 		if (fileName[7] > '9') {
 			fileName[7] -= 10;
@@ -515,66 +797,188 @@ int main() {
 		}
 	}
 
-	cout << "학습 데이터 구축" << endl;
+	sampleCount = 0;
+	filePath = "..\\database\\carData\\back\\";
+	fileName = "carB01.jpg";
+	for (int i = 1; i < 11; i++) {
+		hog(GrayScale(imread(filePath + fileName, CV_LOAD_IMAGE_COLOR)));
+		AddFeature(hogFeatureOfCarB, H, scPtr);
+		fileName[5]++;
+		if (fileName[5] > '9') {
+			fileName[5] -= 10;
+			fileName[4] ++;
+		}
+	}
 
-	//compareImage = GrayScale(imread("..\\samples\\Car\\10.jpg", CV_LOAD_IMAGE_COLOR));
+	sampleCount = 0;
+	filePath = "..\\database\\carData\\front\\";
+	fileName = "f01.jpg";
+	for (int i = 1; i < 6; i++) {
+		hog(GrayScale(imread(filePath + fileName, CV_LOAD_IMAGE_COLOR)));
+		AddFeature(hogFeatureOfCarF, H, scPtr);
+		fileName[2]++;
+		if (fileName[2] > '9') {
+			fileName[2] -= 10;
+			fileName[1] ++;
+		}
+	}
+
+	sampleCount = 0;
+	filePath = "..\\database\\manData\\";
+	fileName = "m01.jpg";
+	for (int i = 1; i < 8; i++) {
+		hog(GrayScale(imread(filePath + fileName, CV_LOAD_IMAGE_COLOR)));
+		AddFeature(hogFeatureOfMan, H, scPtr);
+		fileName[2]++;
+		if (fileName[2] > '9') {
+			fileName[2] -= 10;
+			fileName[1] ++;
+		}
+	}
+
+	cout << "학습 데이터 로드 완료" << endl;
+	system("pause");
+
+	/********************************************************************************
+	************************
+	************************  이 곳에서 비교할 이미지를 불러옵니다.
+	************************
+	*********************************************************************************/
 	compareImage = imread("..\\samples\\Car\\10.jpg", CV_LOAD_IMAGE_COLOR);
-	Mat compareOriginal = compareImage.clone();
-	hog(compareImage);
-	compareImage = grad_xr;
-	
-/*	cvNamedWindow("xr", CV_WINDOW_AUTOSIZE);
-	imshow("xr", grad_xr);
-	cvNamedWindow("yu", CV_WINDOW_AUTOSIZE);
-	imshow("yu", grad_yu);
-	cvNamedWindow("angles", CV_WINDOW_AUTOSIZE);
-	imshow("angles", angles);
-	cvNamedWindow("magnit", CV_WINDOW_AUTOSIZE);
-	imshow("magnit", magnit);*/
+	//compareImage = imread("..\\samples\\car+people\\21m_31s_189008u.jpg", CV_LOAD_IMAGE_COLOR);
+	//compareImage = imread("..\\samples\\human\\5_Free_Things_NYC_JPEG-0aaf6_JPG.jpg", CV_LOAD_IMAGE_COLOR);
+	if (compareImage.cols > 500) {
+		float rate = compareImage.rows / (float)compareImage.cols;
+		compareImage = Resizing(compareImage, 500, (int)(500 * rate));
+	}
+	if (compareImage.rows > 500) {
+		float rate = compareImage.cols / (float)compareImage.rows;
+		compareImage = Resizing(compareImage, (int)(500 * rate), 500);
+	}
 
+	Mat compareOriginal = compareImage.clone();
+	compareImage = GrayScale(compareImage);
 	
 	int matchCount = 0;
-	int clipX = MATCH_SIZE_X;
-	int clipY = MATCH_SIZE_Y;
-	Mat compareClip(clipX, clipY, CV_8UC1);
+	int clipX = 100;
+	int clipY = 60;
+	int incX = clipX / 10;
+	int incY = clipY / 10;
+	Mat compareClip;
 	float similarity = 0;
-	int width = compareImage.cols;
-	int height = compareImage.rows;
-	for (int y = 0; y < height - clipY; y+=3){
-		for (int x = 0; x < width - clipX; x += 3){
-			compareClip = Clipping(compareImage, clipX, clipY, x, y);
+	for (int i = 1; i < 6; i++) {
+		clipX = i * 120;
+		clipY = i * 70;
+		incX = clipX / 10;
+		incY = clipY / 10;
+		for (int y = 0; y < compareImage.rows - clipY; y += incY) {
+			for (int x = 0; x < compareImage.cols - clipX; x += incX) {
+				compareClip = Clipping(compareImage, clipX, clipY, x, y);
+				hog(compareClip);
+				//hogClip(clipX, clipY, x, y);
 
-			similarity = GetSimilarity4(compareClip, intFeatureOfCar3);
-			//EdgeDetection(compareClip, 128, COLOR_WHITE);
-			//similarity += GetSimilarity4(compareClip, edgeFeatureOfCar);
-			similarity /= (MATCH_SIZE_X * MATCH_SIZE_Y);
-			cout << x << "," << y << " 유사도 : " << similarity << endl;
-			if (similarity > -10){
-				//cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
-				//imshow(x + "a" + y, compareClip);
-				cout << "자동차 입니다!" << endl;
-				matchCount++;
+				similarity = GetSimilarity(H, hogFeatureOfCarUZL, nwin_x, nwin_y, B);
+				similarity *= 1 + (i - 1) * 0.3;
+				cout << x << "," << y << " 유사도 : " << similarity << endl;
+				if (similarity > -6.2 ) {
+					//cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
+					//imshow(x + "a" + y, compareClip);
+					cout << "자동차 입니다!" << endl;
+					matchCount++;
 
-				DrawRect(compareOriginal, x, y, clipX, clipY);
-				
-				//x += 10;
-				//y += 10;
-				if (y >= height - clipY){
-					break;
+					DrawRect(compareOriginal, x, y, clipX, clipY, COLOR_RED);
+				}
+
+				similarity = GetSimilarity(H, hogFeatureOfCarUZR, nwin_x, nwin_y, B);
+				similarity *= 1 + (i - 1) * 0.3;
+				cout << x << "," << y << " 유사도 : " << similarity << endl;
+				if (similarity > -6.2) {
+					//cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
+					//imshow(x + "a" + y, compareClip);
+					cout << "자동차 입니다!" << endl;
+					matchCount++;
+
+					DrawRect(compareOriginal, x, y, clipX, clipY, -1);
+				}
+			}
+			if (matchCount > 10) {
+				//break;
+			}
+		}
+	}
+
+	for (int i = 1; i < 6; i++) {
+		clipX = i * 80;
+		clipY = i * 60;
+		incX = clipX / 10;
+		incY = clipY / 10;
+		for (int y = 0; y < compareImage.rows - clipY; y += incY) {
+			for (int x = 0; x < compareImage.cols - clipX; x += incX) {
+				compareClip = Clipping(compareImage, clipX, clipY, x, y);
+				hog(compareClip);
+				//hogClip(clipX, clipY, x, y);
+
+				similarity = GetSimilarity(H, hogFeatureOfCarB, nwin_x, nwin_y, B);
+				similarity *= 1 + (i - 1) * 0.1;
+				cout << x << "," << y << " 유사도 : " << similarity << endl;
+				if (similarity > -5) {
+					//cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
+					//imshow(x + "a" + y, compareClip);
+					cout << "자동차 입니다!" << endl;
+					matchCount++;
+
+					DrawRect(compareOriginal, x, y, clipX, clipY, COLOR_GREEN);
+
+				}
+
+				similarity = GetSimilarity(H, hogFeatureOfCarF, nwin_x, nwin_y, B);
+				similarity *= 1 + (i - 1) * 0.1;
+				cout << x << "," << y << " 유사도 : " << similarity << endl;
+				if (similarity > -5) {
+					//cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
+					//imshow(x + "a" + y, compareClip);
+					cout << "자동차 입니다!" << endl;
+					matchCount++;
+
+					DrawRect(compareOriginal, x, y, clipX, clipY, COLOR_BLUE);
+
 				}
 			}
 		}
-		if (matchCount > 10){
-			//break;
+	}
+
+	for (int i = 1; i < 8; i++) {
+		clipX = i * 30;
+		clipY = i * 80;
+		incX = clipX / 10;
+		incY = clipY / 10;
+		for (int y = 0; y < compareImage.rows - clipY; y += incY) {
+			for (int x = 0; x < compareImage.cols - clipX; x += incX) {
+				compareClip = Clipping(compareImage, clipX, clipY, x, y);
+				hog(compareClip);
+				//hogClip(clipX, clipY, x, y);
+
+				similarity = GetSimilarity(H, hogFeatureOfMan, nwin_x, nwin_y, B);
+				similarity *= 1 + (i - 1) * 0.1;
+				cout << x << "," << y << " 유사도 : " << similarity << endl;
+				if (similarity > -6.5) {
+					//cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
+					//imshow(x + "a" + y, compareClip);
+					cout << "사람 입니다!" << endl;
+					matchCount++;
+
+					DrawRect(compareOriginal, x, y, clipX, clipY, COLOR_MAGENTA);
+
+				}
+			}
 		}
 	}
+
 	
-	cvNamedWindow("feature",CV_WINDOW_AUTOSIZE);
 	cvNamedWindow("compare",CV_WINDOW_AUTOSIZE);
 	cvNamedWindow("compareO", CV_WINDOW_AUTOSIZE);
 	//cvNamedWindow("edge", CV_WINDOW_AUTOSIZE);
 
-	imshow("feature", intFeatureOfCar3);
 	imshow("compare", compareImage);
 	imshow("compareO", compareOriginal);
 	//imshow("edge", edgeFeatureOfCar);
