@@ -6,7 +6,7 @@
 #include<opencv\cv.h>
 #include<opencv\highgui.h>
 #include<math.h>
-
+#include <time.h> 
 #define COLOR_NON -1
 #define COLOR_WHITE 5
 #define COLOR_RED 0
@@ -753,6 +753,8 @@ void DrawRect(Mat source, int startX, int startY, int sizeX, int sizeY , int col
 int main() {
 	//Mat intFeatureOfCar3(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC3);
 	//Mat antiIntFeatureOfCar3(MATCH_SIZE_Y, MATCH_SIZE_X, CV_8UC3);
+	clock_t start_time, end_time;
+	start_time = clock();
 	float* hogFeatureOfCarUZL = new float[nwin_x * nwin_y * B];
 	for (int i = 0; i < nwin_x * nwin_y * B; i++) {
 		hogFeatureOfCarUZL[i] = 0;
@@ -837,16 +839,20 @@ int main() {
 	}
 
 	cout << "학습 데이터 로드 완료" << endl;
+	end_time = clock();                   // End_Time
+	printf("Time : %f\n", ((double)(end_time - start_time)) / CLOCKS_PER_SEC);
 	system("pause");
 
+
+	start_time = clock();
 	/********************************************************************************
 	************************
 	************************  이 곳에서 비교할 이미지를 불러옵니다.
 	************************
 	*********************************************************************************/
-	compareImage = imread("..\\samples\\Car\\10.jpg", CV_LOAD_IMAGE_COLOR);
-	//compareImage = imread("..\\samples\\car+people\\21m_31s_189008u.jpg", CV_LOAD_IMAGE_COLOR);
-	//compareImage = imread("..\\samples\\human\\5_Free_Things_NYC_JPEG-0aaf6_JPG.jpg", CV_LOAD_IMAGE_COLOR);
+	//compareImage = imread("..\\samples\\Car\\11.jpg", CV_LOAD_IMAGE_COLOR);
+	compareImage = imread("..\\samples\\car+people\\21m_31s_189008u.jpg", CV_LOAD_IMAGE_COLOR);
+	//compareImage = imread("..\\samples\\human\\20120204__05dcastrw_400.jpg", CV_LOAD_IMAGE_COLOR);
 	if (compareImage.cols > 500) {
 		float rate = compareImage.rows / (float)compareImage.cols;
 		compareImage = Resizing(compareImage, 500, (int)(500 * rate));
@@ -885,7 +891,6 @@ int main() {
 					//imshow(x + "a" + y, compareClip);
 					cout << "자동차 입니다!" << endl;
 					matchCount++;
-
 					DrawRect(compareOriginal, x, y, clipX, clipY, COLOR_RED);
 				}
 
@@ -982,7 +987,8 @@ int main() {
 	imshow("compare", compareImage);
 	imshow("compareO", compareOriginal);
 	//imshow("edge", edgeFeatureOfCar);
-	
+	end_time = clock();                   // End_Time
+	printf("Time : %f\n", ((double)(end_time - start_time)) / CLOCKS_PER_SEC);
 	char ch = waitKey();	// 무한 대기
 
 
