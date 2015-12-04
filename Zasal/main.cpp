@@ -850,8 +850,11 @@ int main() {
 	************************  이 곳에서 비교할 이미지를 불러옵니다.
 	************************
 	*********************************************************************************/
-	//compareImage = imread("..\\samples\\Car\\11.jpg", CV_LOAD_IMAGE_COLOR);
-	compareImage = imread("..\\samples\\car+people\\21m_31s_189008u.jpg", CV_LOAD_IMAGE_COLOR);
+	//compareImage = imread("..\\samples\\Car\\10.jpg", CV_LOAD_IMAGE_COLOR);
+	compareImage = imread("C:\\Users\\kk070\\Desktop\\testsample\\frame_0943.jpg", CV_LOAD_IMAGE_COLOR);
+	//compareImage = imread("..\\samples\\Car\\12.jpg", CV_LOAD_IMAGE_COLOR);
+	//compareImage = imread("..\\samples\\car+people\\21m_31s_189008u.jpg", CV_LOAD_IMAGE_COLOR);
+	//compareImage = imread("..\\samples\\car+people\\PETS2000.jpg", CV_LOAD_IMAGE_COLOR);	
 	//compareImage = imread("..\\samples\\human\\20120204__05dcastrw_400.jpg", CV_LOAD_IMAGE_COLOR);
 	if (compareImage.cols > 500) {
 		float rate = compareImage.rows / (float)compareImage.cols;
@@ -897,7 +900,7 @@ int main() {
 				similarity = GetSimilarity(H, hogFeatureOfCarUZR, nwin_x, nwin_y, B);
 				similarity *= 1 + (i - 1) * 0.3;
 				cout << x << "," << y << " 유사도 : " << similarity << endl;
-				if (similarity > -6.2) {
+				if (similarity > -5) {
 					//cvNamedWindow(x + "a" + y, CV_WINDOW_AUTOSIZE);
 					//imshow(x + "a" + y, compareClip);
 					cout << "자동차 입니다!" << endl;
